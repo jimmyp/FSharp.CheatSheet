@@ -63,10 +63,9 @@ module Functor
   type Function<'Input, 'Output> = Function of ('Input -> 'Output)
 
   let mapFunction : ('a -> 'b) -> Function<'x, 'a> -> Function<'x, 'b> =
-    fun aTob functionXToa ->
-      let (Function xToa) = functionXToa 
-      let xTob x = x |> xToa |> aTob
-      Function xTob
+    fun aTob (Function xToa)  ->
+      Function (xToa >> aTob)
+
 
   // Implement map for Async using computation expressions
   let mapAsync : ('a -> 'b) -> 'a Async -> 'b Async =
