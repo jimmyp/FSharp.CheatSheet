@@ -1,0 +1,230 @@
+open System
+
+let notImplemented () = raise <| NotImplementedException ()
+
+// Try to do each of these without using the compiler, then check your result
+// after you've written it. This means don't use VSCode with Ionide either ;)
+
+
+// Implement pure for option
+let pureOption : 'a -> 'a option =
+  fun x ->
+    notImplemented ()
+
+
+// Implement apply for option
+let applyOption : ('a -> 'b) option -> 'a option -> 'b option =
+  fun fn x ->
+    notImplemented ()
+
+
+// Without using the compiler, what is the type of pureStringLength?
+let stringLength : string -> int = String.length
+let pureStringLength = pureOption stringLength
+
+
+// Without using the compiler, what is the type of pureLabelNumber?
+let labelNumber : string -> int -> string =
+  fun label num -> sprintf "%s: %i" label num
+let pureLabelNumber = pureOption labelNumber
+
+
+// Without using the compiler, what is the type of oneApply?
+let myLabel : string option = Some "The Meaning of Life, the Universe, and Everything"
+let oneApply = applyOption pureLabelNumber myLabel
+
+
+// Without using the compiler, what is the type of twoApplys? What is its value?
+let myNum : int option = Some 42
+let twoApplys = applyOption oneApply myNum
+
+
+// Use pureOption and applyOption to use mkFullName with maybeFirstName
+// and maybeSurname to get maybeFullName
+let maybeFirstName : string option = Some "Jim"
+let maybeSurname : string option = Some "Pelletier"
+let mkFullName firstName surname = sprintf "%s %s" firstName surname
+let maybeFullName : string option =
+  notImplemented ()
+
+
+// That was probably messy. If we implemented applyOption as an operator
+// can you clean that up?
+let maybeFullName' : string option =
+  let inline (<*>) fn x = notImplemented ()
+  notImplemented ()
+
+
+// Copy in your implementation of mapOption from FunctorExercises
+let mapOption : ('a -> 'b) -> 'a option -> 'b option =
+  fun fn opt ->
+    notImplemented ()
+
+
+// Without using the compiler, what is the type of oneMap?
+let labelNumber' : string -> int -> string =
+  fun label num -> sprintf "%s: %i" label num
+let myLabel' : string option = Some "The Meaning of Life, the Universe, and Everything"
+let oneMap = mapOption labelNumber' myLabel'
+
+
+// Without using the compiler, what is the type of oneMapOneApply? What is its value?
+let myNum' : int option = Some 42
+let oneMapOneApply = applyOption oneMap myNum'
+
+
+// If we define mapOption as an operator (<!>), can you clean up maybeFullName' even further?
+// Hint: you can implement this wholly in terms of map and apply
+let maybeFullName'' : string option =
+  let inline (<!>) fn x = notImplemented ()
+  let inline (<*>) fn x = notImplemented ()
+  notImplemented ()
+
+
+// To prove every Applicative is a Functor, implement Functor's map for option
+// (mapOptionViaApplicative) using only pure and apply
+let mapOptionViaApplicative : ('a -> 'b) -> 'a option -> 'b option =
+  fun fn opt ->
+    notImplemented ()
+
+
+// Implement the not implemented functions below then refactor mkAddress to use
+// functor and applicative functions for option.
+// Hint: You'll want to use the <!> and <*> operators to make it readable
+type Address =
+  { StreetNumber : int
+    Street : string
+    Suburb : string
+    Postcode : string }
+
+let stringToInt : string -> int option =
+  fun str ->
+    notImplemented ()
+let emptyStringToOption : string -> string option =
+  fun str ->
+    notImplemented ()
+
+let mkAddress : string -> string -> string -> string -> Address option =
+  fun streetNo street suburb postcode ->
+    let streetNoOpt = stringToInt streetNo
+    let streetOpt = emptyStringToOption street
+    let suburbOpt = emptyStringToOption suburb
+    let postcodeOpt = emptyStringToOption postcode
+    match (streetNoOpt, streetOpt, suburbOpt, postcodeOpt) with
+    | (Some strNo, Some str, Some sub, Some pc) ->
+      Some { StreetNumber = strNo; Street = str; Suburb = sub; Postcode = pc }
+    | _ ->
+      None
+
+
+// Copy in your implementation of Functor map for Result from Functor Exercises
+let mapResult : ('a -> 'b) -> Result<'a, 'c> -> Result<'b, 'c> =
+  fun fn res ->
+    notImplemented ()
+
+
+// Implement pure for Result
+let pureResult : 'a -> Result<'a, 'e> =
+  fun x ->
+    notImplemented ()
+
+
+// Implement apply for Result
+let applyResult : Result<('a -> 'b), 'e> -> Result<'a, 'e> -> Result<'b, 'e> =
+  fun fn x ->
+    notImplemented ()
+
+
+// Implement calculateCommissionAmount, where commission for an introducer is
+// calculated as a percentage of the loan amount, with a minimum payable
+// commission of $1000 regardless of loan amount
+type IntroducerId = int
+type LoanId = int
+
+let calculateCommissionAmount : decimal -> decimal -> decimal =
+  fun commissionPercentage loanAmount ->
+    notImplemented ()
+
+
+// Use the (fake) database query functions below to get the data you need
+// to perform the above commission calculation and return the amount.
+// Use the functor and applicative functions for Result to achieve this
+type SqlError =
+  | QueryTimeout
+  | OtherError of exn
+let getCommissionPercentageForIntroducerFromDb : IntroducerId -> Result<decimal, SqlError> =
+  fun id -> Ok 2.5m
+let getLoanAmountFromDb : LoanId -> Result<decimal, SqlError> =
+  fun id -> Ok 500000m
+
+let getCommissionAmount : IntroducerId -> LoanId -> Result<decimal, SqlError> =
+  fun introducerId loanId ->
+    notImplemented ()
+
+
+
+type Validation<'a, 'e when 'e : comparison>  =
+  | Success of 'a
+  | Failure of 'e Set
+
+// Implement Functor map for the Validation type above
+let mapValidation : ('a -> 'b) -> Validation<'a, 'e> -> Validation<'b, 'e> =
+  fun fn x ->
+    notImplemented ()
+
+
+// Implement pure for the Validation type above
+let pureValidation : 'a -> Validation<'a, 'e> =
+  fun x ->
+    notImplemented ()
+
+
+// Implement apply for the Validation type above. The difference between
+// Validation and Result is that Validation should accumulate errors in
+// the Failure Set, whereas Result simply uses the first error and discards
+// the rest
+let applyValidation : Validation<('a -> 'b), 'e> -> Validation<'a, 'e> -> Validation<'b, 'e> =
+  fun fn x ->
+    notImplemented ()
+
+
+// Implement the following validation functions
+type ValidationError =
+  | Required of name : string
+  | MustBeAnInteger of name : string
+  | InvalidPostcode
+  | MustBeABoolean of name : string
+
+let validateInt : string -> string -> Validation<int, ValidationError> =
+  fun name str ->
+    notImplemented ()
+let validateStringRequired : string -> string -> Validation<string, ValidationError> =
+  fun name str ->
+    notImplemented ()
+let validatePostcode : string -> Validation<string, ValidationError> =
+  fun str ->
+    notImplemented ()
+
+
+// Implement validateAddress using functor and applicative functions for Validation
+let validateAddress : string -> string -> string -> string -> Validation<Address, ValidationError> =
+  fun streetNo street suburb postcode ->
+    notImplemented ()
+
+
+// Implement validateBool, then implement validateResidence using functor and applicative functions
+// Hint: you should be able to compose with your previous validateAddress function
+type Residence =
+  { Address : Address
+    YearsOccupied : int
+    IsPrimary : bool }
+
+let validateBool : string -> string -> Validation<bool, ValidationError> =
+  fun name str ->
+    notImplemented ()
+
+let validateResidence : string -> string -> string -> string -> string -> string -> Validation<Residence, ValidationError> =
+  fun streetNo street suburb postcode yearsOccupied isPrimary ->
+    notImplemented ()
+
+// TODO: Async, List, ZipList
