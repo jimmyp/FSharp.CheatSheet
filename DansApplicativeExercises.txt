@@ -9,24 +9,26 @@ let notImplemented () = raise <| NotImplementedException ()
 // Implement pure for option
 let pureOption : 'a -> 'a option =
   fun x ->
-    notImplemented ()
+    Some x
 
 
 // Implement apply for option
 let applyOption : ('a -> 'b) option -> 'a option -> 'b option =
-  fun fn x ->
-    notImplemented ()
+  fun optionF optionX ->
+    match optionF, optionX with
+    | Some f, Some x -> Some (f x)
+    | _ -> None
 
 
 // Without using the compiler, what is the type of pureStringLength?
 let stringLength : string -> int = String.length
-let pureStringLength = pureOption stringLength
+let pureStringLength : (string -> int) option = pureOption stringLength
 
 
 // Without using the compiler, what is the type of pureLabelNumber?
 let labelNumber : string -> int -> string =
   fun label num -> sprintf "%s: %i" label num
-let pureLabelNumber = pureOption labelNumber
+let pureLabelNumber : (string -> int -> string) option = pureOption labelNumber
 
 
 // Without using the compiler, what is the type of oneApply?
