@@ -57,6 +57,8 @@ let maybeFullName : string option =
   let x: (string -> string -> string) option = (pureOption mkFullName)
   let x': () = applyOption x 
 
+  // STUCK HERE!
+
 
 // That was probably messy. If we implemented applyOption as an operator
 // can you clean that up?
