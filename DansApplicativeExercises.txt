@@ -33,11 +33,18 @@ let pureLabelNumber : (string -> int -> string) option = pureOption labelNumber
 
 // Without using the compiler, what is the type of oneApply?
 let myLabel : string option = Some "The Meaning of Life, the Universe, and Everything"
-let oneApply = applyOption pureLabelNumber myLabel
-
+//applyOption : ('a     -> 'b) option             -> 'a option    -> 'b option
+//oneApply    : (string -> int -> string) option  -> string option -> 'b option
+//'a = string
+//'b = int -> string
+let oneApply :  (int -> string) option = applyOption pureLabelNumber myLabel
 
 // Without using the compiler, what is the type of twoApplys? What is its value?
 let myNum : int option = Some 42
+//applyOption  : ('a              -> 'b) option             -> 'a option                 -> 'b option
+//twoApplys    : ((int -> string) -> int) option            -> (int -> string) option    -> int option
+//oneApply     : (int -> string) option
+//myNum        : int option
 let twoApplys = applyOption oneApply myNum
 
 
@@ -47,7 +54,8 @@ let maybeFirstName : string option = Some "Jim"
 let maybeSurname : string option = Some "Pelletier"
 let mkFullName firstName surname = sprintf "%s %s" firstName surname
 let maybeFullName : string option =
-  notImplemented ()
+  let x: (string -> string -> string) option = (pureOption mkFullName)
+  let x': () = applyOption x 
 
 
 // That was probably messy. If we implemented applyOption as an operator
