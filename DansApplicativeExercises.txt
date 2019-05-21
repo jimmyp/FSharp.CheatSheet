@@ -139,22 +139,14 @@ let refactoredMkAddress : string -> string -> string -> string -> Address option
     <*> emptyStringToOption suburb 
     <*> emptyStringToOption postcode
 
-// Copy in your implementation of Functor map for Result from Functor Exercises
-let mapResult : ('a -> 'b) -> Result<'a, 'c> -> Result<'b, 'c> =
-  fun fn res ->
-    notImplemented ()
-
-
-// Implement pure for Result
-let pureResult : 'a -> Result<'a, 'e> =
-  fun x ->
-    notImplemented ()
-
 
 // Implement apply for Result
 let applyResult : Result<('a -> 'b), 'e> -> Result<'a, 'e> -> Result<'b, 'e> =
   fun fn x ->
-    notImplemented ()
+    match fn, x with
+    | Ok fn', Ok x' -> Ok (fn' x')
+    | Error a, _ -> Error a
+    | _, Error a -> Error a
 
 
 // Implement calculateCommissionAmount, where commission for a broker is
@@ -162,7 +154,7 @@ let applyResult : Result<('a -> 'b), 'e> -> Result<'a, 'e> -> Result<'b, 'e> =
 // commission of $1000 regardless of loan amount
 let calculateCommissionAmount : decimal -> decimal -> decimal =
   fun commissionPercentage loanAmount ->
-    notImplemented ()
+   max 1000m (commissionPercentage * loanAmount)
 
 
 // Use the (fake) database query functions below to get the data you need
@@ -180,8 +172,13 @@ let getLoanAmountFromDb : LoanId -> Result<decimal, SqlError> =
 
 let getCommissionAmount : BrokerId -> LoanId -> Result<decimal, SqlError> =
   fun brokerId loanId ->
-    notImplemented ()
+  
+    let inline (<!>) fn x = mapResult fn x
+    let inline (<*>) fn x = applyResult fn x
 
+    calculateCommissionAmount
+    <!> getCommissionPercentageForBrokerFromDb brokerId
+    <*> getLoanAmountFromDb loanId
 
 
 type Validation<'a, 'e when 'e : comparison>  =
@@ -191,13 +188,16 @@ type Validation<'a, 'e when 'e : comparison>  =
 // Implement Functor map for the Validation type above
 let mapValidation : ('a -> 'b) -> Validation<'a, 'e> -> Validation<'b, 'e> =
   fun fn x ->
-    notImplemented ()
+   match fn, x with
+   | Success fn', Success x' -> Success (fn' x')
+   | Failure a, _ -> Failure a
+   | _, Failure a -> Failure a
 
 
 // Implement pure for the Validation type above
 let pureValidation : 'a -> Validation<'a, 'e> =
   fun x ->
-    notImplemented ()
+    Success x
 
 
 // Implement apply for the Validation type above. The difference between

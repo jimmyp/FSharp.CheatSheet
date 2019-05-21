@@ -1,5 +1,6 @@
 module CheckApplicative
 open System
+open Functor
 
 // Implement pure for option
 let pureOption : 'a -> 'a option =
@@ -126,3 +127,57 @@ let refactoredMkAddress : string -> string -> string -> string -> Address option
     <*> emptyStringToOption street 
     <*> emptyStringToOption suburb 
     <*> emptyStringToOption postcode
+
+// Copy in your implementation of Functor map for Result from Functor Exercises
+let mapResult : ('a -> 'b) -> Result<'a, 'c> -> Result<'b, 'c> =
+  fun fn res ->
+    match res with
+    | Ok x -> Ok (fn x)
+    | Error x -> Error x
+
+
+// Implement pure for Result
+let pureResult : 'a -> Result<'a, 'e> =
+  fun x ->
+    Ok x
+
+
+// Implement apply for Result
+let applyResult : Result<('a -> 'b), 'e> -> Result<'a, 'e> -> Result<'b, 'e> =
+  fun fn x ->
+    match fn, x with
+    | Ok fn', Ok x' -> Ok (fn' x')
+    | Error a, _ -> Error a
+    | _, Error a -> Error a
+
+
+// Implement calculateCommissionAmount, where commission for a broker is
+// calculated as a percentage of the loan amount, with a minimum payable
+// commission of $1000 regardless of loan amount
+let calculateCommissionAmount : decimal -> decimal -> decimal =
+  fun commissionPercentage loanAmount ->
+   max 1000m (commissionPercentage * loanAmount)
+
+
+// Use the (fake) database query functions below to get the data you need
+// to perform the above commission calculation and return the amount.
+// Use the functor and applicative functions for Result to achieve this
+type BrokerId = int
+type LoanId = int
+type SqlError =
+  | QueryTimeout
+  | OtherError of exn
+let getCommissionPercentageForBrokerFromDb : BrokerId -> Result<decimal, SqlError> =
+  fun id -> Ok 2.5m
+let getLoanAmountFromDb : LoanId -> Result<decimal, SqlError> =
+  fun id -> Ok 500000m
+
+let getCommissionAmount : BrokerId -> LoanId -> Result<decimal, SqlError> =
+  fun brokerId loanId ->
+  
+    let inline (<!>) fn x = mapResult fn x
+    let inline (<*>) fn x = applyResult fn x
+
+    calculateCommissionAmount
+    <!> getCommissionPercentageForBrokerFromDb brokerId
+    <*> getLoanAmountFromDb loanId
