@@ -5,6 +5,7 @@
   <ItemGroup>
     <Compile Include="Tests.fs" />
     <Compile Include="DansFunctorExercises.fs" />
+    <Compile Include="CheckApplicative.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>
