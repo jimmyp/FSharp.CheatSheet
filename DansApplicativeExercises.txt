@@ -181,6 +181,7 @@ let getCommissionAmount : BrokerId -> LoanId -> Result<decimal, SqlError> =
     <*> getLoanAmountFromDb loanId
 
 
+
 type Validation<'a, 'e when 'e : comparison>  =
   | Success of 'a
   | Failure of 'e Set
@@ -189,8 +190,7 @@ type Validation<'a, 'e when 'e : comparison>  =
 let mapValidation : ('a -> 'b) -> Validation<'a, 'e> -> Validation<'b, 'e> =
   fun fn x ->
    match fn, x with
-   | Success fn', Success x' -> Success (fn' x')
-   | Failure a, _ -> Failure a
+   | fn, Success x' -> Success (fn x')
    | _, Failure a -> Failure a
 
 
@@ -206,8 +206,12 @@ let pureValidation : 'a -> Validation<'a, 'e> =
 // the rest
 let applyValidation : Validation<('a -> 'b), 'e> -> Validation<'a, 'e> -> Validation<'b, 'e> =
   fun fn x ->
-    notImplemented ()
-
+    match fn, x with
+    | Success fn', Success x' -> Success (fn' x')
+    | Success fn', Failure e -> Failure e
+    | Failure e, Success _ -> Failure e
+    | Failure e1, Failure e2 -> Failure <| Set.union e1 e2
+    
 
 // Implement the following validation functions
 type ValidationError =
@@ -218,22 +222,43 @@ type ValidationError =
 
 let validateInt : string -> string -> Validation<int, ValidationError> =
   fun name str ->
-    notImplemented ()
+    match System.Int32.TryParse(str) with
+    | (true,int) -> Success int
+    | _ -> Failure <| Set.ofList [MustBeAnInteger name]
 
 let validateStringRequired : string -> string -> Validation<string, ValidationError> =
   fun name str ->
-    notImplemented ()
+    if String.IsNullOrWhiteSpace(str)
+    then Failure <| Set.ofList [Required name]
+    else Success str
 
 // Hint: Australian postcodes must be four digits
 let validatePostcode : string -> Validation<string, ValidationError> =
   fun str ->
-    notImplemented ()
+    if isNull str || str.Length < 4
+    then Failure <| Set.ofList [InvalidPostcode]
+    else Success str
 
 
 // Implement validateAddress using functor and applicative functions for Validation
 let validateAddress : string -> string -> string -> string -> Validation<Address, ValidationError> =
   fun streetNo street suburb postcode ->
-    notImplemented ()
+    
+    let inline (<!>) fn x = mapValidation fn x
+    let inline (<*>) fn x = applyValidation fn x
+
+    let mkAddress : int -> string -> string -> string -> Address =
+      fun streetNo street suburb postcode -> 
+        { StreetNumber = streetNo
+          Street = street
+          Suburb = suburb
+          Postcode = postcode }
+
+    mkAddress
+    <!> validateInt "streetNo" streetNo
+    <*> validateStringRequired "street" street
+    <*> validateStringRequired "suburb" suburb
+    <*> validatePostcode postcode
 
 
 // Implement validateBool, then implement validateResidence using functor and applicative functions
@@ -245,28 +270,50 @@ type Residence =
 
 let validateBool : string -> string -> Validation<bool, ValidationError> =
   fun name str ->
-    notImplemented ()
+    match System.Boolean.TryParse(str) with
+    | (true,bool) -> Success bool
+    | _ -> Failure <| Set.ofList [MustBeABoolean name]
+
+let mkResidence : Address -> int -> bool -> Residence =
+  fun address yearsOccupied isPrimary ->
+    { Address = address
+      YearsOccupied = yearsOccupied
+      IsPrimary = isPrimary }
 
 let validateResidence : string -> string -> string -> string -> string -> string -> Validation<Residence, ValidationError> =
   fun streetNo street suburb postcode yearsOccupied isPrimary ->
-    notImplemented ()
+  
+    let inline (<!>) fn x = mapValidation fn x
+    let inline (<*>) fn x = applyValidation fn x
+
+    mkResidence
+    <!> validateAddress streetNo street suburb postcode
+    <*> validateInt "yearsOccupied" yearsOccupied
+    <*> validateBool "isPrimary" isPrimary
 
 
 // Which built-in function implements applicative's pure? Implement pureAsync by using it
 let pureAsync : 'a -> Async<'a> =
-  fun x -> notImplemented()
+  fun x -> async {
+     return x
+  }
 
 
 // Implement apply for Async (use a F# async computation expression)
 let applyAsync : Async<'a -> 'b> -> Async<'a> -> Async<'b> =
-  fun fn x ->
-    notImplemented()
+  fun fn x -> async {
+    let! fn' = fn
+    let! x' = x
+    return fn' x'
+  }
 
 
 // Copy in your implementation of mapAsync from Functor Exercises
-let mapAsync : ('a -> 'b) -> Async<'a> -> Async<'b> =
-  fun fn x ->
-    notImplemented()
+  let mapAsync : ('a -> 'b) -> 'a Async -> 'b Async =
+    fun fn a -> async {
+      let! x = a
+      return fn x
+    }
 
 
 // In Functor Exercises you refactored 'refactorMe' to use mapAsync
@@ -276,27 +323,64 @@ let mapAsync : ('a -> 'b) -> Async<'a> -> Async<'b> =
 let readFile : string -> Async<byte[]> = notImplemented ()
 let writeFile : string -> string -> Async<unit> = notImplemented ()
 
-let refactorMe = async {
-  let! bytes = readFile @"C:\Temp\Nice file.txt"
-  let decodedFile = System.Text.Encoding.UTF8.GetString bytes
-  let wordsFromFile = decodedFile.Split ([|' '|], StringSplitOptions.RemoveEmptyEntries)
+let refactored = 
+  let getWordsFromFile fileName : string -> Async<byte[]> = 
+    readFile fileName
+    |> mapAsync (fun bytes -> System.Text.Encoding.UTF8.GetString bytes)
+    |> mapAsync (fun decodedFile -> decodedFile.Split ([|' '|], StringSplitOptions.RemoveEmptyEntries))
+    
+  async {
+    
+    let! wordsFromFile = getWordsFromFile @"C:\Temp\Nice file.txt"
+    let! wordsFromFile2 = getWordsFromFile @"C:\Temp\Another nice file.txt"
 
-  let! bytes = readFile @"C:\Temp\Another nice file.txt"
-  let decodedFile2 = System.Text.Encoding.UTF8.GetString bytes
-  let wordsFromFile2 = decodedFile2.Split ([|' '|], StringSplitOptions.RemoveEmptyEntries)
+    let uniqueWords =
+      Seq.append wordsFromFile wordsFromFile2
+      |> Set.ofSeq
+    do!
+      String.Join (Environment.NewLine, uniqueWords)
+      |> writeFile (@"C:\Temp\All unique words.txt")
 
-  let uniqueWords =
-    Seq.append wordsFromFile wordsFromFile2
-    |> Set.ofSeq
-  do!
-    String.Join (Environment.NewLine, uniqueWords)
-    |> writeFile (@"C:\Temp\All unique words.txt")
-
-  return Set.count uniqueWords
-}
+    return Set.count uniqueWords
+  }
 
 let refactoredRefactorMe : Async<int> =
-  notImplemented ()
+
+  let inline (<!>) fn x = mapAsync fn x
+  let inline (<*>) fn x = applyAsync fn x
+
+  let bytesToString : byte[] -> string = 
+    System.Text.Encoding.UTF8.GetString
+
+  let splitStringOnSpaces : string -> string[] =
+    fun decodedFile -> decodedFile.Split ([|' '|], StringSplitOptions.RemoveEmptyEntries)
+
+  let joinOnNewLines : string seq -> string =
+    fun x -> String.Join (Environment.NewLine, x)
+
+  let bytesToWords = splitStringOnSpaces << bytesToString
+  let getWordsFromFile fileName = bytesToWords <!> readFile fileName
+  let joinAndDeDupe x y =  Seq.append x y |> Set.ofSeq
+
+
+
+  let uniqueWords =  
+    joinAndDeDupe
+    <!> getWordsFromFile @"C:\Temp\Nice file.txt"
+    <*> getWordsFromFile @"C:\Temp\Another nice file.txt"
+
+  let linesToWrite =
+    joinOnNewLines
+    <!> uniqueWords
+
+  do
+    writeFile (@"C:\Temp\All unique words.txt")
+    <!> linesToWrite
+    |> ignore
+  
+  let countWords = Set.count <!> uniqueWords
+
+  countWords
 
 
 // Implement getHardcodedUris using functor & applicative functions for MyAsync

@@ -1,6 +1,7 @@
 module CheckApplicative
 open System
 open Functor
+open Functor
 
 // Implement pure for option
 let pureOption : 'a -> 'a option =
@@ -181,3 +182,202 @@ let getCommissionAmount : BrokerId -> LoanId -> Result<decimal, SqlError> =
     calculateCommissionAmount
     <!> getCommissionPercentageForBrokerFromDb brokerId
     <*> getLoanAmountFromDb loanId
+
+
+type Validation<'a, 'e when 'e : comparison>  =
+  | Success of 'a
+  | Failure of 'e Set
+
+// Implement Functor map for the Validation type above
+let mapValidation : ('a -> 'b) -> Validation<'a, 'e> -> Validation<'b, 'e> =
+  fun fn x ->
+   match fn, x with
+   | fn, Success x' -> Success (fn x')
+   | _, Failure a -> Failure a
+
+
+// Implement pure for the Validation type above
+let pureValidation : 'a -> Validation<'a, 'e> =
+  fun x ->
+    Success x
+
+
+// Implement apply for the Validation type above. The difference between
+// Validation and Result is that Validation should accumulate errors in
+// the Failure Set, whereas Result simply uses the first error and discards
+// the rest
+let applyValidation : Validation<('a -> 'b), 'e> -> Validation<'a, 'e> -> Validation<'b, 'e> =
+  fun fn x ->
+    match fn, x with
+    | Success fn', Success x' -> Success (fn' x')
+    | Success fn', Failure e -> Failure e
+    | Failure e, Success _ -> Failure e
+    | Failure e1, Failure e2 -> Failure <| Set.union e1 e2
+    
+
+// Implement the following validation functions
+type ValidationError =
+  | Required of name : string
+  | MustBeAnInteger of name : string
+  | InvalidPostcode
+  | MustBeABoolean of name : string
+
+let validateInt : string -> string -> Validation<int, ValidationError> =
+  fun name str ->
+    match System.Int32.TryParse(str) with
+    | (true,int) -> Success int
+    | _ -> Failure <| Set.ofList [MustBeAnInteger name]
+
+let validateStringRequired : string -> string -> Validation<string, ValidationError> =
+  fun name str ->
+    if String.IsNullOrWhiteSpace(str)
+    then Failure <| Set.ofList [Required name]
+    else Success str
+
+// Hint: Australian postcodes must be four digits
+let validatePostcode : string -> Validation<string, ValidationError> =
+  fun str ->
+    if isNull str || str.Length < 4
+    then Failure <| Set.ofList [InvalidPostcode]
+    else Success str
+
+
+// Implement validateAddress using functor and applicative functions for Validation
+let validateAddress : string -> string -> string -> string -> Validation<Address, ValidationError> =
+  fun streetNo street suburb postcode ->
+    
+    let inline (<!>) fn x = mapValidation fn x
+    let inline (<*>) fn x = applyValidation fn x
+
+    let mkAddress : int -> string -> string -> string -> Address =
+      fun streetNo street suburb postcode -> 
+        { StreetNumber = streetNo
+          Street = street
+          Suburb = suburb
+          Postcode = postcode }
+
+    mkAddress
+    <!> validateInt "streetNo" streetNo
+    <*> validateStringRequired "street" street
+    <*> validateStringRequired "suburb" suburb
+    <*> validatePostcode postcode
+
+
+// Implement validateBool, then implement validateResidence using functor and applicative functions
+// Hint: you should be able to compose with your previous validateAddress function
+type Residence =
+  { Address : Address
+    YearsOccupied : int
+    IsPrimary : bool }
+
+let validateBool : string -> string -> Validation<bool, ValidationError> =
+  fun name str ->
+    match System.Boolean.TryParse(str) with
+    | (true,bool) -> Success bool
+    | _ -> Failure <| Set.ofList [MustBeABoolean name]
+
+let mkResidence : Address -> int -> bool -> Residence =
+  fun address yearsOccupied isPrimary ->
+    { Address = address
+      YearsOccupied = yearsOccupied
+      IsPrimary = isPrimary }
+
+let validateResidence : string -> string -> string -> string -> string -> string -> Validation<Residence, ValidationError> =
+  fun streetNo street suburb postcode yearsOccupied isPrimary ->
+  
+    let inline (<!>) fn x = mapValidation fn x
+    let inline (<*>) fn x = applyValidation fn x
+
+    mkResidence
+    <!> validateAddress streetNo street suburb postcode
+    <*> validateInt "yearsOccupied" yearsOccupied
+    <*> validateBool "isPrimary" isPrimary
+
+
+// Which built-in function implements applicative's pure? Implement pureAsync by using it
+let pureAsync : 'a -> Async<'a> =
+  fun x -> async {
+     return x
+  }
+
+let mapAsync2 : ('a -> 'b) -> Async<'a> -> Async<'b> = mapAsync
+
+// Implement apply for Async (use a F# async computation expression)
+let applyAsync : Async<'a -> 'b> -> Async<'a> -> Async<'b> =
+  fun fn x -> async {
+    let! fn' = fn
+    let! x' = x
+    return fn' x'
+  }
+
+let refactored : Async<int>= 
+
+  let inline (<!>) fn x = mapAsync fn x
+  let inline (<*>) fn x = applyAsync fn x
+
+  let bytesToString : byte[] -> string = 
+    System.Text.Encoding.UTF8.GetString
+
+  let splitStringOnSpaces : string -> string[] =
+    fun decodedFile -> decodedFile.Split ([|' '|], StringSplitOptions.RemoveEmptyEntries)
+
+  let joinOnNewLines : string seq -> string =
+    fun x -> String.Join (Environment.NewLine, x)
+
+  let bytesToWords = splitStringOnSpaces << bytesToString
+  let getWordsFromFile fileName = bytesToWords <!> readFile fileName
+  let joinAndDeDupe x y =  Seq.append x y |> Set.ofSeq
+
+
+
+  let uniqueWords =  
+    joinAndDeDupe
+    <!> getWordsFromFile @"C:\Temp\Nice file.txt"
+    <*> getWordsFromFile @"C:\Temp\Another nice file.txt"
+
+  let linesToWrite =
+    joinOnNewLines
+    <!> uniqueWords
+
+  do
+    writeFile (@"C:\Temp\All unique words.txt")
+    <!> linesToWrite
+    |> ignore
+  
+  let countWords = Set.count <!> uniqueWords
+
+  countWords
+
+let refactored' = 
+
+  let inline (<!>) fn x = mapAsync fn x
+  let inline (<*>) fn x = applyAsync fn x
+
+  let bytesToString : byte[] -> string = 
+    System.Text.Encoding.UTF8.GetString
+  
+  let joinOnNewLines : string seq -> string =
+    fun x -> String.Join (Environment.NewLine, x)
+
+  let getWordsFromFile fileName =
+    bytesToString
+    >> (fun decodedFile -> decodedFile.Split ([|' '|], StringSplitOptions.RemoveEmptyEntries))
+    <!> readFile fileName
+
+  let joinAndDeDupe x y =  Seq.append x y |> Set.ofSeq
+
+  let uniqueWords =  
+    joinAndDeDupe
+    <!> getWordsFromFile @"C:\Temp\Nice file.txt"
+    <*> getWordsFromFile @"C:\Temp\Another nice file.txt"
+
+  let linesToWrite =
+    joinOnNewLines
+    <!> uniqueWords
+
+  do
+    writeFile (@"C:\Temp\All unique words.txt")
+    <!> linesToWrite
+    |> ignore
+  
+  Set.count <!> uniqueWords
