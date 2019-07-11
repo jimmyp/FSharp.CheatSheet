@@ -383,6 +383,7 @@ let refactoredRefactorMe : Async<int> =
   countWords
 
 
+
 // Implement getHardcodedUris using functor & applicative functions for MyAsync
 // Note that the order of HttpResponses returned should match the order
 // of the uris
@@ -396,52 +397,118 @@ let applyMyAsync : MyAsync<'a -> 'b> -> MyAsync<'a> -> MyAsync<'b> = fun fn x ->
 let httpGet : Uri -> MyAsync<HttpResponse> = notImplemented ()
 
 let getHardcodedUris : MyAsync<HttpResponse list> =
+  let inline (<!>) fn x = mapMyAsync fn x
+  let inline (<*>) fn x = applyMyAsync fn x
   let uri1 = Uri "https://www.google.com"
   let uri2 = Uri "https://fsharp.org"
   let uri3 = Uri "https://portal.azure.com"
-  notImplemented()
+
+  let joinResponses (x: HttpResponse) (y: HttpResponse) (z: HttpResponse): HttpResponse list = x :: y :: [z]
+
+  joinResponses
+  <!> httpGet uri1
+  <*> httpGet uri2
+  <*> httpGet uri3
 
 
 // Can you generalise your solution to getHardcodedUris to an arbitrary list of Uris?
 // Demonstrate this by implementing getAllUris. You should only require functor and applicative
 // functions for async to do this
-let getUris : Uri list -> MyAsync<HttpResponse list> =
+let rec  getUris : Uri list -> MyAsync<HttpResponse list> =
   fun uris ->
-    notImplemented ()
+
+    let inline (<!>) fn x = mapMyAsync fn x
+    let inline (<*>) fn x = applyMyAsync fn x
+    let append r rs = r::rs
+
+    let rec accumulateResponses uris' responses =
+      match uris' with
+      | uri::moreUris -> 
+        let responses' =
+          append
+          <!> httpGet uri
+          <*> responses
+        accumulateResponses moreUris responses'
+      | [] -> 
+        List.rev
+        <!> responses
+    
+    accumulateResponses uris (pureMyAsync [])
 
 
 // Can you generalise your solution further, such that it doesn't care about Uris and HttpResponses?
 // FYI: This particular function is called 'traverse'
 let traverseMyAsync : ('a -> MyAsync<'b>) -> 'a list -> MyAsync<'b list> =
   fun fn xs ->
-    notImplemented ()
+    
+    let inline (<!>) fn x = mapMyAsync fn x
+    let inline (<*>) fn x = applyMyAsync fn x
+    let append r rs = r::rs
+
+    let rec accumulateResponses xs' responses =
+      match xs' with
+      | x::moreXs -> 
+        let responses' =
+          append
+          <!> fn x
+          <*> responses
+        accumulateResponses moreXs responses'
+      | [] -> 
+        List.rev
+        <!> responses
+    
+    accumulateResponses xs (pureMyAsync [])
 
 
 // Implement traverse for Option
 let traverseOption : ('a -> 'b option) -> 'a list -> 'b list option =
   fun fn xs ->
-    notImplemented ()
+
+    let inline (<!>) fn x = mapOption fn x
+    let inline (<*>) fn x = applyOption fn x
+    let append r rs = r::rs
+
+    let rec accumulateResponses xs' responses =
+      match xs' with
+      | x::moreXs -> 
+        let responses' =
+          (append)
+          <!> fn x
+          <*> responses
+        accumulateResponses moreXs responses'
+      | [] -> 
+        List.rev
+        <!> responses
+    
+    accumulateResponses xs (pureOption [])
 
 
 // Describe the similarities between traverseMyAsync and traverseOption. What is
 // different between both implementations and what is the same?
+//
+// Everything is the same except for the implementation of apply and map.
+// Both lift append into the applicative and then use map and apply for the rest
 
 
 // Sequence is a variation upon traverse. Implement this for async by reusing your traverseMyAsync function
 let sequenceMyAsync : MyAsync<'a> list -> MyAsync<'a list> =
   fun listOfAsyncs ->
-    notImplemented ()
+    traverseMyAsync id listOfAsyncs
 
 
 // Copy in your implementation of functor's map for list from Functor Exercises
 let mapList : ('a -> 'b) -> 'a list -> 'b list =
   fun fn lst ->
-    notImplemented ()
+    let rec mapRec f l  =
+      match l with
+      | [] -> []
+      | x::xs -> (f x) ::  (mapRec f xs)
+    mapRec fn lst
 
 
 // Implement pure for list
 let pureList : 'a -> 'a list =
-  fun x -> notImplemented()
+  fun x -> [x]
 
 
 // Implement apply for list
@@ -450,8 +517,18 @@ let pureList : 'a -> 'a list =
 // (fun a b -> (a, b)) <!> [1;2] <*> [3;4] = [(1,3);(1,4);(2,3);(2,4)]
 let applyList : ('a -> 'b) list -> 'a list -> 'b list =
   fun fns xs ->
-    notImplemented ()
 
+    let rec accumulateListForOneFunction g aList bList =
+      match aList with
+      | y::ys -> accumulateListForOneFunction g ys ((g y)::bList)
+      | [] -> bList |> List.rev
+    
+    let rec accumulateThroughFunctionsInList gs aList bList =
+      match gs with
+      | (h::hs) -> accumulateThroughFunctionsInList hs aList (bList @ (accumulateListForOneFunction h aList []))
+      | [] -> bList |> List.rev
+
+    accumulateThroughFunctionsInList fns xs []
 
 // Using functor and applicative for list, generate a list of all possible loan
 // interest rate dimensions (implement 'loanInterestRateDimensions')
@@ -469,7 +546,14 @@ let validLvrRanges : LvrRange list =
     { From = 90; To = 95 } ]
 
 let loanInterestRateDimensions : (Product * RiskGrade * LvrRange) list =
-  notImplemented ()
+
+  let inline (<!>) fn x = mapList fn x
+  let inline (<*>) fn x = applyList fn x
+  let combine : Product -> RiskGrade ->  LvrRange -> (Product * RiskGrade *  LvrRange) =
+    fun product riskGrade lvrRange -> ( product, riskGrade, lvrRange)
+
+  combine <!>  [ Sharp ; Star ; Free] <*> [AAA ; AA ; A ; BPlus ; B ; BMinus] <*>  validLvrRanges
+
 
 
 // Because F# is a strict-evaluation language, lists cannot be infinite. However,
@@ -486,27 +570,34 @@ let loanInterestRateDimensions : (Product * RiskGrade * LvrRange) list =
 // implement functor's map for seq
 let mapSeq : ('a -> 'b) -> 'a seq -> 'b seq =
   fun fn xs ->
-    notImplemented ()
+    seq { for x in xs -> fn x}
 
 
 // Implement pure for seq
 let pureSeq : 'a -> 'a seq =
   fun x ->
-    notImplemented ()
-
+    seq { yield x }
 
 // Implement apply for sequence using the cross-product implementation of applicative
 let applySeq : ('a -> 'b) seq -> 'a seq -> 'b seq =
   fun fns xs ->
-    notImplemented ()
+    seq {
+      for f in fns do
+        for x in xs do
+          yield f x
+    }
 
 
 // Reimplement 'loanInterestRateDimensions' but this time as a sequence to make sure
 // your implementation produces consistent results with your list applicative
 // implementation from above
 let loanInterestRateDimensionsAsSeq : (Product * RiskGrade * LvrRange) seq =
-  notImplemented ()
+  let inline (<!>) fn x = mapSeq fn x
+  let inline (<*>) fn x = applySeq fn x
+  let combine : Product -> RiskGrade ->  LvrRange -> (Product * RiskGrade *  LvrRange) =
+    fun product riskGrade lvrRange -> ( product, riskGrade, lvrRange)
 
+  combine <!>  [ Sharp ; Star ; Free] <*> [AAA ; AA ; A ; BPlus ; B ; BMinus] <*>  validLvrRanges
 
 // "Zipping" two lists together can be visualised by thinking of how a zipper
 // zips the two sides of the zip together into one strip.
@@ -514,21 +605,36 @@ let loanInterestRateDimensionsAsSeq : (Product * RiskGrade * LvrRange) seq =
 // Implement zipToTupleList yourself (don't use the built-in List.zip function)
 let zipToTupleList : 'a list -> 'b list -> ('a * 'b) list =
   fun xs ys ->
-    notImplemented ()
+    
+    let rec zipToTupleList' aList bList abList =
+      match aList, bList with
+      | (a::moreAs), (b::moreBs) -> 
+        let abList' = (a, b) :: abList
+        zipToTupleList' moreAs moreBs abList'
+      | [], _ 
+      | _ , [] -> abList |> List.rev
+    
+    zipToTupleList' xs ys []
 
 
 // Can you generalise your zipToTupleList function such that it can produce
 // any structure, not just tuples?
 let zipLists : ('a -> 'b -> 'c) -> 'a list -> 'b list -> 'c list =
   fun fn xs ys ->
-    notImplemented ()
-
+    let rec zipToTupleList' aList bList abList =
+      match aList, bList with
+      | (a::moreAs), (b::moreBs) -> 
+        let abList' = fn a b :: abList
+        zipToTupleList' moreAs moreBs abList'
+      | [], _ 
+      | _ , [] -> abList |> List.rev
+    
+    zipToTupleList' xs ys []
 
 // Re-implement zipToTupleList in terms of the generalised zipLists function
 let zipToTupleList' : 'a list -> 'b list -> ('a * 'b) list =
   fun xs ys ->
-    notImplemented ()
-
+    zipLists (fun x y -> x, y) xs ys
 
 // One of the powers of sequences is that they can be infinite since they can
 // be lazily generated. Implement zipSequences so that it works with infinite
@@ -539,15 +645,25 @@ let zipToTupleList' : 'a list -> 'b list -> ('a * 'b) list =
 // a pure function, so we'll let it pass this time! :)
 let zipSequences : ('a -> 'b -> 'c) -> 'a seq -> 'b seq -> 'c seq =
   fun fn xs ys ->
-    notImplemented ()
+    let xEnumerator = xs.GetEnumerator ()
+    let yEnumerator = ys.GetEnumerator ()
 
+    if not (isNull xEnumerator.Current || isNull yEnumerator.Current) then
+      seq {
+        yield fn xEnumerator.Current yEnumerator.Current
+        while xEnumerator.MoveNext () && yEnumerator.MoveNext () do
+          yield fn xEnumerator.Current yEnumerator.Current
+      }
+    else
+      [] |> Seq.ofList
 
 // What are the disadvantages of your zipSequences implementation versus your zipLists
 // implementation?
+// Mutability.
 
 // What are the advantages of your zipSequences implementation versus your zipLists
 // implementation?
-
+// Works with infinite lists. Is Lazy. Uses less memory?
 
 // There are multiple ways you could implement the applicative pattern for
 // sequences. Previously you implemented applicative by creating the cross product
@@ -556,23 +672,29 @@ let zipSequences : ('a -> 'b -> 'c) -> 'a seq -> 'b seq -> 'c seq =
 // (fun a b -> (a, b)) <!> [1;2] <*> [3;4;5] = [(1,3);(2,4)]
 type ZipList<'a> = ZipList of 'a seq
 
-
 // Implement map for ZipList
 let mapZipList : ('a -> 'b) -> ZipList<'a> -> ZipList<'b> =
   fun fn x ->
-    notImplemented()
-
+    let (ZipList xSeq) = x 
+    ZipList (mapSeq fn xSeq)
 
 // Implement apply for ZipList
 let applyZipList : ZipList<'a -> 'b> -> ZipList<'a> -> ZipList<'b> =
   fun fns xs ->
-    notImplemented ()
+    
+    let (ZipList xSeq) = xs
+    let (ZipList fSeq) = fns
+    let appliedSeq = seq {
+      for x in xSeq do
+        for f in fSeq do
+          yield f x
+    }
+    ZipList (appliedSeq)
 
 
 // Implement pure for ZipList
 let pureZipList : 'a -> ZipList<'a> =
-  fun x -> notImplemented ()
-
+  fun x -> ZipList <| seq { yield x }
 
 // One of the laws of applicatives is that functor's map and applicative's pure and apply
 // must work consistently. More specifically
@@ -587,39 +709,29 @@ let pureZipList : 'a -> ZipList<'a> =
 let applicativeAndFunctorConsistencyLawTest : unit =
   let fn x = x + 2
   let lst = ZipList [1;2]
-  let (ZipList mapResults) = notImplemented ()
-  let (ZipList pureThenApplyResults) = notImplemented ()
+  let (ZipList mapResults) = mapZipList fn lst
+  let (ZipList pureThenApplyResults) = applyZipList (pureZipList fn) lst
   if Seq.toList mapResults <> Seq.toList pureThenApplyResults then
     failwithf "Oh no, your implementation is wrong! Map: %A PureThenApply: %A" mapResults pureThenApplyResults
 
-
 // Why do you think we can't implement ZipList using the F# list type internally
 // (ie. why are we using seq?)
-
 
 // Implement the indexes function such that it returns an ascending sequence
 // of integers starting from 0 up to but not including the value of the count arg
 // Example: indexes 5 = [0;1;2;3;4]
 let indexes : int -> int seq =
   fun count ->
-    notImplemented ()
-
-
-// Implement Seq.take yourself using your ZipList functor and applicative functions
-// HINT: you will need to use the indexes function you just implemented
-let takeSeq : int -> 'a seq -> 'a seq =
-  fun count xs ->
-    notImplemented ()
+    seq { for x in [0..count-1] do yield x}
 
 
 // Implement Seq.filter yourself using sequence expressions
 let filterSeq : ('a -> bool) -> 'a seq -> 'a seq =
   fun predicate xs ->
-    notImplemented ()
-
+    seq { for x in xs do if predicate x then yield x}
 
 // Implement Seq.skip yourself using your ZipList functor and applicative functions
 // HINT: use your indexes and filterSeq function
 let skipSeq : int -> 'a seq -> 'a seq =
   fun count xs ->
-    notImplemented ()
+    seq { for x in xs do if indexes count |>Seq.contains x |> not then yield x}

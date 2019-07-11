@@ -1,6 +1,4 @@
-module CheckApplicative
 open System
-open Functor
 
 // Implement pure for option
 let pureOption : 'a -> 'a option =
@@ -299,6 +297,13 @@ let pureAsync : 'a -> Async<'a> =
      return x
   }
 
+    // Implement map for Async using computation expressions
+let mapAsync : ('a -> 'b) -> 'a Async -> 'b Async =
+  fun fn a -> async {
+    let! x = a
+    return fn x
+  }
+
 let mapAsync2 : ('a -> 'b) -> Async<'a> -> Async<'b> = mapAsync
 
 // Implement apply for Async (use a F# async computation expression)
@@ -308,6 +313,13 @@ let applyAsync : Async<'a -> 'b> -> Async<'a> -> Async<'b> =
     let! x' = x
     return fn' x'
   }
+
+let readFile : string -> Async<byte[]> =
+  fun _ -> pureAsync [||]
+
+
+let writeFile : string -> string -> Async<unit> = 
+  fun _ __ -> pureAsync ()
 
 let refactored : Async<int>= 
 
@@ -381,81 +393,6 @@ let refactored' =
   
   Set.count <!> uniqueWords
 
-// Implement getHardcodedUris using functor & applicative functions for MyAsync
-// Note that the order of HttpResponses returned should match the order
-// of the uris
-// You don't need to implement map, pure and apply for MyAsync, nor care about
-// its implementation
-type MyAsync<'a> = YouDontNeedToKnow
-type HttpResponse = Unimportant
-let mapMyAsync : ('a -> 'b) -> MyAsync<'a> -> MyAsync<'b> = fun fn x -> notImplemented ()
-let pureMyAsync : 'a -> MyAsync<'a> = fun x -> notImplemented ()
-let applyMyAsync : MyAsync<'a -> 'b> -> MyAsync<'a> -> MyAsync<'b> = fun fn x -> notImplemented ()
-let httpGet : Uri -> MyAsync<HttpResponse> = notImplemented ()
-
-let getHardcodedUris : MyAsync<HttpResponse list> =
-  let inline (<!>) fn x = mapMyAsync fn x
-  let inline (<*>) fn x = applyMyAsync fn x
-  let uri1 = Uri "https://www.google.com"
-  let uri2 = Uri "https://fsharp.org"
-  let uri3 = Uri "https://portal.azure.com"
-
-  let joinResponses (x: HttpResponse) (y: HttpResponse) (z: HttpResponse): HttpResponse list = x :: y :: [z]
-
-  joinResponses
-  <!> httpGet uri1
-  <*> httpGet uri2
-  <*> httpGet uri3
-
-
-// Can you generalise your solution to getHardcodedUris to an arbitrary list of Uris?
-// Demonstrate this by implementing getAllUris. You should only require functor and applicative
-// functions for async to do this
-let rec  getUris : Uri list -> MyAsync<HttpResponse list> =
-  fun uris ->
-
-    let inline (<!>) fn x = mapMyAsync fn x
-    let inline (<*>) fn x = applyMyAsync fn x
-    let append r rs = r::rs
-
-    let rec accumulateResponses uris' responses =
-      match uris' with
-      | uri::moreUris -> 
-        let responses' =
-          append
-          <!> httpGet uri
-          <*> responses
-        accumulateResponses moreUris responses'
-      | [] -> 
-        List.rev
-        <!> responses
-    
-    accumulateResponses uris (pureMyAsync [])
-
-
-// Can you generalise your solution further, such that it doesn't care about Uris and HttpResponses?
-// FYI: This particular function is called 'traverse'
-let traverseMyAsync : ('a -> MyAsync<'b>) -> 'a list -> MyAsync<'b list> =
-  fun fn xs ->
-    
-    let inline (<!>) fn x = mapMyAsync fn x
-    let inline (<*>) fn x = applyMyAsync fn x
-    let append r rs = r::rs
-
-    let rec accumulateResponses xs' responses =
-      match xs' with
-      | x::moreXs -> 
-        let responses' =
-          (append)
-          <!> fn x
-          <*> responses
-        accumulateResponses moreXs responses'
-      | [] -> 
-        List.rev
-        <!> responses
-    
-    accumulateResponses xs (pureMyAsync [])
-
 
 // Implement traverse for Option
 let traverseOption : ('a -> 'b option) -> 'a list -> 'b list option =
@@ -477,11 +414,6 @@ let traverseOption : ('a -> 'b option) -> 'a list -> 'b list option =
     |> List.fold folder initalState
     |> mapOption List.rev
     
-
-// Sequence is a variation upon traverse. Implement this for async by reusing your traverseMyAsync function
-let sequenceMyAsync : MyAsync<'a> list -> MyAsync<'a list> =
-  fun listOfAsyncs ->
-    traverseMyAsync id listOfAsyncs
 
 let mapList : ('a -> 'b) -> 'a list -> 'b list =
   fun fn lst ->
@@ -631,17 +563,12 @@ let zipToTupleList' : 'a list -> 'b list -> ('a * 'b) list =
 // a pure function, so we'll let it pass this time! :)
 let zipSequences : ('a -> 'b -> 'c) -> 'a seq -> 'b seq -> 'c seq =
   fun fn xs ys ->
-    let xEnumerator = xs.GetEnumerator ()
-    let yEnumerator = ys.GetEnumerator ()
-
-    if not (isNull xEnumerator.Current || isNull yEnumerator.Current) then
       seq {
-        yield fn xEnumerator.Current yEnumerator.Current
+        use xEnumerator = xs.GetEnumerator ()
+        use yEnumerator = ys.GetEnumerator ()
         while xEnumerator.MoveNext () && yEnumerator.MoveNext () do
           yield fn xEnumerator.Current yEnumerator.Current
       }
-    else
-      [] |> Seq.ofList
 
 // What are the disadvantages of your zipSequences implementation versus your zipLists
 // implementation?
@@ -668,19 +595,24 @@ let mapZipList : ('a -> 'b) -> ZipList<'a> -> ZipList<'b> =
 let applyZipList : ZipList<'a -> 'b> -> ZipList<'a> -> ZipList<'b> =
   fun fns xs ->
     
-    let (ZipList xSeq) = xs
     let (ZipList fSeq) = fns
-    let appliedSeq = seq {
-      for x in xSeq do
-        for f in fSeq do
-          yield f x
-    }
-    ZipList (appliedSeq)
+    let (ZipList xSeq) = xs
+    if Seq.length fSeq  = 1 then mapZipList (Seq.head fSeq) xs else zipSequences id fSeq xSeq
+    
 
+    ZipList (zipped)
 
 // Implement pure for ZipList
 let pureZipList : 'a -> ZipList<'a> =
   fun x -> ZipList <| seq { yield x }
+
+let doesMyZipListEvenZip : unit =
+  let inline (<!>) fn x = mapZipList fn x
+  let inline (<*>) fn x = applyZipList fn x
+  let (ZipList actual) = (fun a b -> (a, b)) <!> ZipList [1;2] <*> ZipList [3;4;5]
+  let expected = [(1,3);(2,4)]
+  if Seq.toList actual <> expected then
+    failwithf "Oh no, your implementation is wrong! Actual: %A Expected: %A" actual expected
 
 // One of the laws of applicatives is that functor's map and applicative's pure and apply
 // must work consistently. More specifically
@@ -695,7 +627,29 @@ let pureZipList : 'a -> ZipList<'a> =
 let applicativeAndFunctorConsistencyLawTest : unit =
   let fn x = x + 2
   let lst = ZipList [1;2]
-  let (ZipList mapResults) = notImplemented ()
-  let (ZipList pureThenApplyResults) = notImplemented ()
+  let (ZipList mapResults) = mapZipList fn lst
+  let (ZipList pureThenApplyResults) = applyZipList (pureZipList fn) lst
   if Seq.toList mapResults <> Seq.toList pureThenApplyResults then
     failwithf "Oh no, your implementation is wrong! Map: %A PureThenApply: %A" mapResults pureThenApplyResults
+
+// Why do you think we can't implement ZipList using the F# list type internally
+// (ie. why are we using seq?)
+
+// Implement the indexes function such that it returns an ascending sequence
+// of integers starting from 0 up to but not including the value of the count arg
+// Example: indexes 5 = [0;1;2;3;4]
+let indexes : int -> int seq =
+  fun count ->
+    seq { for x in [0..count-1] do yield x}
+
+
+// Implement Seq.filter yourself using sequence expressions
+let filterSeq : ('a -> bool) -> 'a seq -> 'a seq =
+  fun predicate xs ->
+    seq { for x in xs do if predicate x then yield x}
+
+// Implement Seq.skip yourself using your ZipList functor and applicative functions
+// HINT: use your indexes and filterSeq function
+let skipSeq : int -> 'a seq -> 'a seq =
+  fun count xs ->
+    seq { for x in xs do if indexes count |>Seq.contains x |> not then yield x}
